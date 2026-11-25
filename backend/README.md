@@ -14,6 +14,23 @@ The root `.env` file must contain the same database and Redis passwords used by 
 
 The shared IntelliJ run configuration is a standard Java Application configuration, so it does not require the Spring Boot IDE plugin. It sets `SPRING_PROFILES_ACTIVE=dev`. The `qa` and `prod` profiles require their own database and Redis environment variables; do not use those profiles locally without the matching environment secrets.
 
+## Backend structure and coding conventions
+
+- `api` contains HTTP controllers, request/response DTOs, and API error mapping. Keep database access out of controllers.
+- `service` contains service contracts; `service.impl` contains application logic and transaction boundaries.
+- `persistence` contains PostgreSQL queries and row mapping. Release 1 uses `JdbcTemplate`, so it does not need JPA entity classes; add domain entities only when a persistence model benefits from them.
+- Keep each Java source file below 500 lines. Split cohesive responsibilities into focused types before a file approaches that limit.
+- Validate input at the API boundary, keep error responses safe for clients, and log failures server-side. Never log enquiry names, phone numbers, email addresses, passwords, tokens, or other personal data.
+- Use constructor injection, descriptive names, small methods, and explicit transactions for write workflows.
+
+Student records are intentionally out of Release 1 and should be added with the authenticated student/staff portal work in a later release.
+
+## Publishing and deployment
+
+GitHub stores the source; it does not run this Spring Boot application. For a portfolio demo, a public repository is appropriate once its contents have been checked for secrets and personal data. A live demo needs a hosting service for the Spring Boot app and persistent PostgreSQL storage. Redis can be added as a hosted cache; the demo can also run without relying on cached data if the application is configured for that. Docker Compose is useful for local development and simple demos, but production data should use persistent storage and backups.
+
+Do not publish the local `.env` file or use real student records on a public demo. Keep credentials in the host's secret/environment configuration. Choose a host and domain only when you are ready to make the demo public; GitHub Pages alone cannot run this backend or database.
+
 ## Local endpoints
 
 - Website: `http://localhost:8080/`

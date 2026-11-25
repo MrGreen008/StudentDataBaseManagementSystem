@@ -3,33 +3,14 @@ package edu.vishvaya.portal.service;
 import edu.vishvaya.portal.api.AnnouncementResponse;
 import edu.vishvaya.portal.api.CollegeOverviewResponse;
 import edu.vishvaya.portal.api.DepartmentResponse;
-import edu.vishvaya.portal.persistence.PublicContentRepository;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service
-public class PublicContentService {
+public interface PublicContentService {
 
-    private final PublicContentRepository repository;
+    List<AnnouncementResponse> announcements();
 
-    public PublicContentService(PublicContentRepository repository) {
-        this.repository = repository;
-    }
+    CollegeOverviewResponse overview();
 
-    @Cacheable("public-announcements")
-    public List<AnnouncementResponse> announcements() {
-        return repository.findPublishedAnnouncements();
-    }
-
-    @Cacheable("college-overview")
-    public CollegeOverviewResponse overview() {
-        return repository.findCollegeOverview();
-    }
-
-    @Cacheable("public-departments")
-    public List<DepartmentResponse> departments() {
-        return repository.findDepartments();
-    }
+    List<DepartmentResponse> departments();
 }
