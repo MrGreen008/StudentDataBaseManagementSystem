@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Vishvaya Public Portal" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="vishvaya-portal" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="edu.vishvaya.portal.VishvayaPortalApplication" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="VM_PARAMETERS" value="" />
+    <option name="PROGRAM_PARAMETERS" value="" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
