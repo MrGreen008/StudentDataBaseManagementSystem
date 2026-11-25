@@ -2,7 +2,7 @@ const admissionDialog = document.querySelector('#admission-dialog');
 const departmentDialog = document.querySelector('#department-dialog');
 document.querySelectorAll('[data-admission]').forEach((button) => button.addEventListener('click', () => admissionDialog.showModal()));
 document.querySelectorAll('#admission-dialog .dialog-close').forEach((button) => button.addEventListener('click', () => admissionDialog.close()));
-document.querySelector('#admission-notices').addEventListener('click', () => admissionDialog.close());
+document.querySelector('#admission-notices')?.addEventListener('click', () => admissionDialog.close());
 admissionDialog.addEventListener('click', (event) => { if (event.target === admissionDialog) admissionDialog.close(); });
 document.querySelectorAll('#department-dialog .dialog-close').forEach((button) => button.addEventListener('click', () => departmentDialog.close()));
 departmentDialog.addEventListener('click', (event) => { if (event.target === departmentDialog) departmentDialog.close(); });
