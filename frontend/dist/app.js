@@ -203,7 +203,7 @@ enquiryForm?.addEventListener('submit', async (event) => {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(values)
     });
-    status.textContent = `${receipt.message} Reference: ${receipt.reference}`;
+    status.textContent = `${receipt.message} Reference: ${receipt.reference}. Received: ${receipt.receivedAtDisplay}`;
     enquiryForm.reset();
   } catch (error) {
     status.textContent = error.message === 'Failed to fetch'

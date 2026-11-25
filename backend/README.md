@@ -47,7 +47,8 @@ The public homepage reads announcements, metrics, and department names from the 
 After connecting IntelliJ's Database tool to the local PostgreSQL container, enquiries can be reviewed with:
 
 ```sql
-SELECT id, full_name, phone_number, email, programme_of_interest, status, created_at
+SELECT id, full_name, phone_number, email, programme_of_interest, status,
+       TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI:SS AM') || ' IST' AS created_at_display
 FROM admission_enquiry
 ORDER BY created_at DESC;
 ```

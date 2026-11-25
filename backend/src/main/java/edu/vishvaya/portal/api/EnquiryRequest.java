@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 
 public record EnquiryRequest(
         @NotBlank @Size(max = 120) String fullName,
-        @NotBlank @Pattern(regexp = "^[+0-9()\\-\\s]{8,20}$", message = "Enter a valid phone number") String phoneNumber,
+        @NotBlank @Pattern(regexp = "^[0-9]{10}$", message = "Enter a 10-digit phone number") String phoneNumber,
         @Email @Size(max = 254) String email,
         @Size(max = 120) String programmeOfInterest,
         @NotBlank @Size(max = 1500) String message,
