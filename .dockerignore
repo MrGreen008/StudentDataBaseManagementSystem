@@ -1,0 +1,7 @@
+.git
+.idea
+.run
+.env
+**/target
+**/node_modules
+**/.DS_Store
