@@ -12,6 +12,8 @@ The Spring Boot application serves the public website and its API from the same 
 
 The root `.env` file must contain the same database and Redis passwords used by Compose. Do not commit `.env`.
 
+The shared IntelliJ run configuration is a standard Java Application configuration, so it does not require the Spring Boot IDE plugin. It sets `SPRING_PROFILES_ACTIVE=dev`. The `qa` and `prod` profiles require their own database and Redis environment variables; do not use those profiles locally without the matching environment secrets.
+
 ## Local endpoints
 
 - Website: `http://localhost:8080/`
