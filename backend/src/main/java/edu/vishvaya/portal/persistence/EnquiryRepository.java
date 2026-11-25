@@ -25,8 +25,9 @@ public class EnquiryRepository {
         String sql = """
                 INSERT INTO admission_enquiry
                     (id, full_name, phone_number, email, programme_of_interest,
-                     message, privacy_consent, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'NEW', ?)
+                     message, privacy_consent, status, created_at, updated_at,
+                     created_by, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'NEW', ?, ?, 'PUBLIC', 'PUBLIC')
                 ON CONFLICT (id) DO NOTHING
                 """;
 
@@ -40,6 +41,7 @@ public class EnquiryRepository {
                     request.programmeOfInterest() == null ? null : request.programmeOfInterest().trim(),
                     request.message().trim(),
                     request.privacyConsent(),
+                    receivedAt,
                     receivedAt
             );
             if (inserted == 1) {

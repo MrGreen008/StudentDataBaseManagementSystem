@@ -44,11 +44,16 @@ Do not publish the local `.env` file or use real student records on a public dem
 
 The public homepage reads announcements, metrics, and department names from the API. Submitting the admission form validates consent and stores the enquiry in PostgreSQL. This release does not expose an API for reading enquiries publicly; inspect them through an authenticated database connection in IntelliJ. Student and staff authentication, notice editing, and enquiry triage belong in a later portal release.
 
+Database rows carry `created_by`, `created_at`, `updated_by`, and `updated_at` audit metadata. Existing seed data is attributed to `SYSTEM`; public admission enquiries are attributed to `PUBLIC`. Once staff and student sign-in is added, write operations must take the actor from Spring Security's authenticated principal, never from a name supplied by the browser. PostgreSQL updates `updated_at` automatically; the application sets `updated_by` when authenticated update flows are introduced.
+
 After connecting IntelliJ's Database tool to the local PostgreSQL container, enquiries can be reviewed with:
 
 ```sql
 SELECT id, full_name, phone_number, email, programme_of_interest, status,
-       TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI:SS AM') || ' IST' AS created_at_display
+       created_by,
+       TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI:SS AM') || ' IST' AS created_at_display,
+       updated_by,
+       TO_CHAR(updated_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY, HH12:MI:SS AM') || ' IST' AS updated_at_display
 FROM admission_enquiry
 ORDER BY created_at DESC;
 ```
