@@ -20,7 +20,6 @@ public class PublicContentServiceImpl implements PublicContentService {
     }
 
     @Override
-    @Cacheable("public-announcements")
     public List<AnnouncementResponse> announcements() {
         return repository.findPublishedAnnouncements();
     }
@@ -32,7 +31,6 @@ public class PublicContentServiceImpl implements PublicContentService {
     }
 
     @Override
-    @Cacheable("public-departments")
     public List<DepartmentResponse> departments() {
         return repository.findDepartments();
     }

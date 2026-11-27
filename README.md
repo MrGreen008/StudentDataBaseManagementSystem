@@ -8,6 +8,10 @@ Release 1 serves the public college website from Spring Boot, loads announcement
 
 See [the backend setup guide](backend/README.md) for IntelliJ steps, API URLs, and the optional Docker-based app preview. The public site source is in [frontend/dist](frontend/dist/).
 
+## Release 2
+
+Sign-in, account management, college setup, student and faculty dashboards, and staff announcement management are available at `/portal.html`. The backend setup guide documents first-administrator provisioning and API usage. The roadmap records local release verification.
+
 ## Local services
 
 - PostgreSQL and Redis run in Docker.

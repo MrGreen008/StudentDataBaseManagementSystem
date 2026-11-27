@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Vishvaya</title><link rel="stylesheet" href="/portal.css">
+  <script src="/portal.js" defer></script>
+</head>
+<body>
+  <header><a href="/">Vishvaya <span>Institute of Technology</span></a>
+    <details id="account-menu" hidden>
+      <summary id="account-label">My account</summary>
+      <div><button id="open-settings" type="button">Change password</button>
+      <button id="logout" type="button">Sign out</button></div>
+    </details>
+  </header>
+  <main>
+    <h1>College portal</h1>
+    <p id="status" role="status" aria-live="polite"></p>
+    <form id="login">
+      <h2>Sign in</h2>
+      <label>Login<input name="username" autocomplete="username" required maxlength="100"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Sign in</button>
+    </form>
+    <section id="account" hidden>
+      <h2 id="welcome"></h2><p id="role"></p>
+      <section id="settings" hidden>
+      <form id="password">
+        <h3>Change password</h3>
+        <p>Use at least 12 characters and at most 72 UTF-8 bytes. Sign in again after changing your password.</p>
+        <label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label>New password<input name="newPassword" type="password" autocomplete="new-password" required minlength="12"></label>
+        <button>Change password</button>
+      </form>
+      <button id="close-settings" type="button" hidden>Back to dashboard</button>
+      </section>
+      <section id="dashboard" hidden></section>
+    </section>
+  </main>
+</body>
+</html>
