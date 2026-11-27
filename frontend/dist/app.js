@@ -14,7 +14,7 @@ const helpReplies = {
   admissions:'Use the Admission enquiry button. A verified office phone will be added before launch.',
   scholarships:'Scholarship announcements will appear in the public Campus Desk. Verified office contacts will be added before launch.',
   programmes:'Browse the BTech carousel and select a branch for its concept snapshot and proposed honours/minors.',
-  student:'Student records and certificate requests require the secure student portal planned for Release 2 and Release 4.'
+  student:'Sign in to the student portal to view your academic profile. Certificate requests are planned for Release 4.'
 };
 helpToggle.addEventListener('click', () => { helpPanel.hidden = !helpPanel.hidden; helpToggle.setAttribute('aria-expanded', String(!helpPanel.hidden)); });
 document.querySelector('#help-close').addEventListener('click', () => { helpPanel.hidden = true; helpToggle.setAttribute('aria-expanded','false'); });
@@ -74,12 +74,13 @@ departmentCards.forEach((card, index) => {
 });
 carousel.replaceChildren(carouselInner);
 const carouselApi = window.bootstrap?.Carousel.getOrCreateInstance(carousel, {interval:false,wrap:true,touch:true});
-const slides = [...carousel.querySelectorAll('.carousel-item')];
+let slides = [...carousel.querySelectorAll('.carousel-item')];
 let activeSlide = 0;
 let wheelDelta = 0;
 let lastWheelMove = 0;
 carousel.addEventListener('slid.bs.carousel', (event) => { activeSlide = event.to; });
 const moveCarousel = (direction) => {
+  if (!slides.length) return;
   if (carouselApi) direction > 0 ? carouselApi.next() : carouselApi.prev();
   else {
     slides[activeSlide].classList.remove('active');
@@ -133,9 +134,10 @@ async function requestJson(url, options) {
 
 async function loadPublicAnnouncements() {
   const track = document.querySelector('#announcement-track');
+  if (location.protocol === 'file:') return;
+  track.replaceChildren();
   try {
     const items = await requestJson('/api/public/announcements');
-    if (!items.length) return;
     track.replaceChildren(...items.map((notice) => {
       const card = document.createElement('article');
       card.className = 'announcement-card';
@@ -156,7 +158,7 @@ async function loadPublicAnnouncements() {
       return card;
     }));
   } catch {
-    // Keep the baked-in homepage content visible when the API is not running.
+    track.textContent = 'Announcements are temporarily unavailable.';
   }
 }
 
@@ -173,18 +175,49 @@ async function loadCollegeOverview() {
 }
 
 async function loadDepartmentNames() {
+  if (location.protocol === 'file:') return;
+  carouselInner.replaceChildren();
+  slides = [];
   try {
     const departments = await requestJson('/api/public/departments');
-    departments.forEach((department) => {
-      const card = document.querySelector(`[data-department="${CSS.escape(department.code)}"]`);
-      if (!card) return;
+    const cards = departments.map((department, index) => {
+      let card = departmentCards.find(item => item.dataset.department === department.code);
+      if (!card) {
+        card = document.createElement('article');
+        card.className = 'program-card';
+        const code = document.createElement('span');
+        code.className = 'program-code';
+        card.append(code, document.createElement('h3'));
+      }
       const code = card.querySelector('.program-code');
       const title = card.querySelector('h3');
       if (title) title.textContent = department.name;
-      if (code) code.textContent = `${code.textContent.split('·')[0].trim()} · ${department.code.toUpperCase()}`;
+      if (Object.hasOwn(pathways, department.code)) pathways[department.code].title = department.name;
+      if (code) code.textContent = `${String(index + 1).padStart(2, '0')} · ${department.code.toUpperCase()}`;
+      return card;
     });
+    carouselInner.replaceChildren();
+    cards.forEach((card, index) => {
+      if (index % 4 === 0) {
+        const slide = document.createElement('div');
+        slide.className = 'carousel-item' + (index === 0 ? ' active' : '');
+        const grid = document.createElement('div');
+        grid.className = 'program-slide-grid row g-3';
+        slide.append(grid);
+        carouselInner.append(slide);
+      }
+      const wrapper = document.createElement('div');
+      wrapper.className = 'program-slide-card col';
+      wrapper.append(card);
+      carouselInner.lastElementChild.firstElementChild.append(wrapper);
+    });
+    slides = [...carousel.querySelectorAll('.carousel-item')];
+    activeSlide = 0;
   } catch {
-    // Keep the local catalogue visible when the API is not running.
+    if (location.protocol !== 'file:') {
+      carouselInner.textContent = 'Departments are temporarily unavailable.';
+      slides = [];
+    }
   }
 }
 

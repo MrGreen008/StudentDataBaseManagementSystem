@@ -22,6 +22,39 @@ This is the proposed release plan for the single-college BTech demo. We will ref
 - Staff tools to publish and manage public announcements.
 - Basic student, faculty, and admin portal dashboards.
 
+### Identity and permissions design
+
+Use one same-origin Spring Security sign-in flow for all three portals. Resolve the dashboard from the account's role after authentication. Store an immutable account ID, unique normalized login, adaptive password hash, role, enabled flag, password-change requirement, and security version in PostgreSQL. Keep the authenticated account ID and security version in a server-side session. Rotate the session ID on sign-in, expire idle sessions, use an HttpOnly and SameSite=Lax cookie, and require Secure cookies over HTTPS in QA and production.
+
+Allow an operator to provision the first administrator once with credentials supplied outside Git. Serialize bootstrap and make restarts idempotent. Administrators provision subsequent accounts and issue temporary passwords through a private channel. Require a password change before granting portal access. Use a generic sign-in failure and throttle repeated attempts. On reset, deactivation, or permission change, increment the security version in the same transaction. Check the version and enabled flag on each protected request. Serialize changes that could remove the last active administrator.
+
+| Actor | Allowed actions and backend scope |
+| --- | --- |
+| Public visitor | Read the published public site and submit an admission enquiry. Keep the existing anonymous JSON enquiry contract and its fixed PUBLIC audit actor independent of a portal session. |
+| Student | Read their own profile, program and cohort through a self-service endpoint. Resolve the student ID from the principal. |
+| Faculty | Read their own profile and assigned offerings. Scope both list and detail queries by faculty account ID. |
+| Authorized publisher | Administrators may manage announcements. A faculty member needs an explicit administrator-granted publishing permission for the same tools. |
+| Administrator | Provision, reset and deactivate accounts, maintain college setup and assign faculty. Attribute each authenticated write to the immutable account ID. |
+
+Allow public routes by HTTP method and path. Require explicit authority for protected APIs and deny unmatched routes. Keep CSRF protection for sign-in, password changes, logout and authenticated mutations. Supply a same-origin CSRF token to the portal frontend and refresh it after authentication. Limit any public-write exception to the existing JSON enquiry POST. Send private responses with `Cache-Control: no-store`. Return 401 for unauthenticated private API requests, 403 for prohibited operations, and 404 for records outside a user's authorized query scope. Preserve these responses through the existing API exception handler.
+
+### College setup and publication
+
+Append Flyway migrations after V3. Reuse `academic_department` and `campus_announcement` with their existing keys and audit metadata. Link programs to departments, cohorts to programs, and honors/minors to the programs offering them. Give students a unique account-linked profile and a cohort. Give faculty a unique account-linked profile. Represent an offering as a course taught to a cohort in a term, with a unique faculty-to-offering assignment. Enforce references and uniqueness in PostgreSQL. Reject removal of referenced catalog records and support retirement where records must survive for historical use.
+
+Build the admin dashboard around account and catalog management, the faculty dashboard around assignments, and the student dashboard around the signed-in student's college record. Show publishing controls to authorized staff. Use the existing announcement publication flag and publication and expiry timestamps. Make publish, unpublish and catalog visibility changes effective on the public site after commit. Account for scheduled changes when caching announcements. Render the API's published collection even when it is empty, and render added or hidden departments correctly. Keep the standalone offline preview distinct from live data.
+
+### Implementation order and acceptance checks
+
+Local release review covered the populated V3-to-V5 upgrade, identity lifecycle, scoped profile and assignment queries, assignment retirement and announcement publication. Chrome verification used an administrator, two faculty and two students in separate sessions. Checks covered account provisioning, college setup, publication and withdrawal, loss of publisher access, sign-out, and dashboards at a 390-pixel viewport. College forms use manually entered reference codes and account IDs. QA promotion is a separate release step.
+
+The portal UI refinement adds separate administration sections, an account menu for password changes and sign-out, explicit create and edit forms, role selectors and labeled record cards. Existing record codes are read-only during editing. Further UI work can replace manual reference codes with record selectors and add search to long lists.
+
+1. **Identity.** Deliver bootstrap, sign-in, required password change, logout, and revocation together. Verify repeated bootstrap preserves credentials, resets invalidate old sessions, a disabled account loses access on its next request, and concurrent admin changes preserve an active administrator.
+2. **College setup and scope.** Deliver catalog migrations, admin workflows and scoped queries. Exercise fresh installation and upgrade from populated V3 data. Verify two students see only their own records, and two faculty with different assignments see only their assigned offerings. Removing an assignment must affect the next request.
+3. **Portal and publication workflows.** Use each homepage portal link to sign in and reach the appropriate dashboard. Create a catalog entry, assign faculty, and publish then withdraw a notice through the UI. Verify the public homepage handles empty results, scheduling and expiration, and still accepts anonymous enquiries.
+4. **Release review.** Exercise allowed and denied API calls directly as well as through the UI. Cover missing or invalid CSRF tokens, logged-out sessions, role changes, publisher permission removal, cross-account reads and failed writes. Check that persisted audit actors match the authenticated account and that logs and responses omit secrets. Review the running application before promotion.
+
 ## Release 3 — Academic operations
 
 - Student course enrollment, timetable views, and role-scoped student/faculty bulletin boards for timetables, examination schedules, and campus holidays.
