@@ -12,6 +12,14 @@ See [the backend setup guide](backend/README.md) for IntelliJ steps, API URLs, a
 
 Sign-in, account management, college setup, student and faculty dashboards, and staff announcement management are available at `/portal.html`. The backend setup guide documents first-administrator provisioning and API usage. The roadmap records local release verification.
 
+## Release 3
+
+Academic operations add administrator-managed course enrollments and class scheduling, weekly timetables, faculty attendance registers and availability, student attendance history and discrepancy reports, and academic bulletins. Start with the [academic operations setup](backend/README.md#release-3-academic-operations).
+
+## Release 4
+
+Exam schedules, published results, backlog registration, result reviews, certificate requests, and office guidance are available through the portals. See [Release 4 setup](backend/README.md#release-4-exams-and-student-services).
+
 ## Local services
 
 - PostgreSQL and Redis run in Docker.

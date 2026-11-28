@@ -58,7 +58,7 @@ public class AccountServiceImpl implements AccountService {
     @Override
     @Transactional
     public AccountView create(AccountRequests.Create request, UUID actor) {
-        String login = request.login().toLowerCase(Locale.ROOT);
+        String login = request.login().trim().toLowerCase(Locale.ROOT);
         accounts.lockIdentity();
         if (accounts.byLogin(login).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Login already in use.");

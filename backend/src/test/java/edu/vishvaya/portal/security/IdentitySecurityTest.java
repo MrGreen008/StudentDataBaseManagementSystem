@@ -40,4 +40,23 @@ class IdentitySecurityTest {
         request.setRemoteAddr(address);
         return request;
     }
+
+    @Test
+    void captchaRefreshHasItsOwnThirtyRequestAllowance() throws Exception {
+        var filter=new LoginThrottleFilter();
+        for(int attempt=0;attempt<30;attempt++) {
+            var request=new MockHttpServletRequest("GET","/api/auth/captcha");
+            var response=new MockHttpServletResponse();
+            filter.doFilter(request,response,(input,output)->output.setContentType("passed"));
+            assertEquals("passed",response.getContentType());
+        }
+        var response=new MockHttpServletResponse();
+        filter.doFilter(new MockHttpServletRequest("GET","/api/auth/captcha"),response,
+            (input,output)->fail("CAPTCHA refresh limit was bypassed."));
+        assertEquals(429,response.getStatus());
+        assertTrue(Integer.parseInt(response.getHeader("Retry-After"))>0);
+        var loginResponse=new MockHttpServletResponse();
+        filter.doFilter(login("127.0.0.1"),loginResponse,(input,output)->output.setContentType("passed"));
+        assertEquals("passed",loginResponse.getContentType());
+    }
 }

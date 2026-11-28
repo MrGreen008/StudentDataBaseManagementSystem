@@ -13,6 +13,12 @@ public class CollegeRepository {
     public CollegeRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public List<Map<String, Object>> list(CollegeResource resource) {
+        if (resource == CollegeResource.terms) {
+            return jdbc.queryForList("""
+                    SELECT code,name,starts_on::text,ends_on::text,active,created_by,updated_by,created_at,updated_at
+                    FROM academic_term ORDER BY code
+                    """);
+        }
         return jdbc.queryForList("SELECT * FROM " + resource.table + " ORDER BY code");
     }
 

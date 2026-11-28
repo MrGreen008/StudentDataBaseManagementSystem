@@ -12,6 +12,7 @@ import java.util.UUID;
 public class AccountPrincipal implements UserDetails, CredentialsContainer {
     private final UUID id;
     private final String login;
+    private final String role;
     private String password;
     private final long version;
     private final boolean enabled;
@@ -21,6 +22,7 @@ public class AccountPrincipal implements UserDetails, CredentialsContainer {
     public AccountPrincipal(PortalAccount account) {
         id = account.id();
         login = account.login();
+        role = account.role();
         password = account.passwordHash();
         version = account.securityVersion();
         enabled = account.enabled();
@@ -36,6 +38,7 @@ public class AccountPrincipal implements UserDetails, CredentialsContainer {
     }
 
     public UUID id() { return id; }
+    public String role() { return role; }
     public long version() { return version; }
     public boolean passwordChangeRequired() { return passwordChangeRequired; }
     @Override public String getUsername() { return login; }

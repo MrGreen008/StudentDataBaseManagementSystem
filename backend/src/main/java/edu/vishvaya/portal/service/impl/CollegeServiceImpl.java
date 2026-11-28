@@ -47,6 +47,8 @@ public class CollegeServiceImpl implements CollegeService {
                 throw badRequest("Supply a value for " + field);
             }
         }
+        // Keep academic eligibility checks consistent with concurrent college setup edits.
+        accounts.lockIdentity();
         try {
             if (resource == CollegeResource.terms) {
                 values.put("starts_on", LocalDate.parse((String) values.get("starts_on")));
@@ -55,7 +57,6 @@ public class CollegeServiceImpl implements CollegeService {
             if (resource == CollegeResource.students || resource == CollegeResource.faculty) {
                 UUID account = UUID.fromString((String) values.get("account_id"));
                 String expected = resource == CollegeResource.students ? "STUDENT" : "FACULTY";
-                accounts.lockIdentity();
                 if (!accounts.byId(account).map(row -> row.role().equals(expected)).orElse(false)) {
                     throw badRequest("Select an account with the matching role.");
                 }

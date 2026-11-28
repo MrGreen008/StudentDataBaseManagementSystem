@@ -3,10 +3,14 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · Vishvaya</title><link rel="stylesheet" href="/portal.css">
+  <script src="/portal-workspace.js" defer></script>
+  <script src="/portal-academic.js" defer></script>
+  <script src="/portal-services.js" defer></script>
   <script src="/portal.js" defer></script>
 </head>
 <body>
   <header><a href="/">Vishvaya <span>Institute of Technology</span></a>
+    <button id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch theme">☾</button>
     <details id="account-menu" hidden>
       <summary id="account-label">My account</summary>
       <div><button id="open-settings" type="button">Change password</button>
@@ -16,12 +20,29 @@
   <main>
     <h1>College portal</h1>
     <p id="status" role="status" aria-live="polite"></p>
+    <section id="login-layout">
+    <figure class="portal-photo">
+      <img id="portal-photo" src="/images/gathering-hall.jpg" alt="Generated college assembly hall concept">
+      <figcaption><span>VISHVAYA INSTITUTE OF TECHNOLOGY</span><h2 id="portal-caption">Your next chapter starts here.</h2><p>One campus. A connected academic community.</p></figcaption>
+    </figure>
+    <div class="login-panel">
+    <nav id="portal-roles" aria-label="Choose portal">
+      <button type="button" data-role="STUDENT">Student</button>
+      <button type="button" data-role="FACULTY">Faculty</button>
+      <button type="button" data-role="ADMIN">Administration</button>
+    </nav>
     <form id="login">
       <h2>Sign in</h2>
-      <label>Login<input name="username" autocomplete="username" required maxlength="100"></label>
+      <label>Username or email<input name="username" autocomplete="username" required maxlength="254"></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
       <button>Sign in</button>
     </form>
+    <div class="login-actions"><button id="open-register" type="button">New here? Register</button>
+      <button id="open-recovery" type="button">Forgot password?</button></div>
+    <section id="self-service" hidden></section>
+    <p id="demo-registration-note" class="login-help">Demo access — students and faculty can register to explore the portal. Faculty publications require administrator approval.</p>
+    <p class="login-help">Use the account provided by your college administrator. For password resets, contact your administrator.</p>
+    </div></section>
     <section id="account" hidden>
       <h2 id="welcome"></h2><p id="role"></p>
       <section id="settings" hidden>
@@ -37,5 +58,6 @@
       <section id="dashboard" hidden></section>
     </section>
   </main>
+  <script src="/portal-access.js" defer></script>
 </body>
 </html>

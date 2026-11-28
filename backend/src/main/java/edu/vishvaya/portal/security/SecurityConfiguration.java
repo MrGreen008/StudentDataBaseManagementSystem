@@ -15,6 +15,10 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
 @Configuration
 public class SecurityConfiguration {
     @Bean
+    PortalAuthenticationProvider portalAuthenticationProvider(AccountUserDetailsService users, PasswordEncoder passwords) {
+        return new PortalAuthenticationProvider(users, passwords);
+    }
+    @Bean
     PasswordEncoder passwordEncoder() {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
@@ -24,13 +28,20 @@ public class SecurityConfiguration {
         http.authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.GET, "/", "/index.html", "/app.js", "/styles.css",
-                        "/images/**", "/portal.html", "/portal.js", "/portal.css",
-                        "/api/auth/csrf", "/api/public/announcements", "/api/public/overview",
+                        "/images/**", "/portal.html", "/portal.js", "/portal-workspace.js", "/portal-access.js",
+                        "/portal-academic.js", "/portal-services.js", "/portal.css",
+                        "/api/auth/csrf", "/api/auth/captcha", "/api/public/announcements", "/api/public/overview",
                         "/api/public/departments", "/actuator/health").permitAll()
                 .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
                         "/v3/api-docs", "/v3/api-docs/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/public/enquiries").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/forgot-password",
+                        "/api/auth/reset-password").permitAll()
                 .requestMatchers("/api/auth/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/portal/notices").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/portal/notices/*/attachment").authenticated()
+                .requestMatchers("/api/staff/portal-notices/**").hasAnyRole("ADMIN","FACULTY")
+                .requestMatchers("/api/staff/announcements/**").hasRole("ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/faculty/**").hasRole("FACULTY")
                 .requestMatchers("/api/student/**").hasRole("STUDENT")
@@ -40,6 +51,7 @@ public class SecurityConfiguration {
                     request.getMethod().equals("POST")
                             && request.getServletPath().equals("/api/public/enquiries")))
             .formLogin(form -> form.loginPage("/portal.html")
+                    .authenticationDetailsSource(PortalLoginDetails::new)
                     .loginProcessingUrl("/api/auth/login")
                     .successHandler((request, response, authentication) -> response.setStatus(204))
                     .failureHandler((request, response, exception) -> response.sendError(401, "Sign-in failed.")))

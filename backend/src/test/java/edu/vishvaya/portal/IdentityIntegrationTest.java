@@ -29,14 +29,36 @@ class IdentityIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired edu.vishvaya.portal.service.CollegeService college;
     @Autowired edu.vishvaya.portal.service.NoticeService notices;
+    @Autowired edu.vishvaya.portal.service.PortalNoticeService portalNotices;
+    @Autowired edu.vishvaya.portal.service.PortalDocumentService documents;
+    @Autowired edu.vishvaya.portal.service.RegistrationService registration;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    edu.vishvaya.portal.service.PortalMailService mail;
 
     @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry properties) {
-        // Exercise V4 as an upgrade over populated Release 1 data.
+    static void properties(DynamicPropertyRegistry properties) throws java.sql.SQLException {
+        // Exercise each upgrade over the data already present at that release.
         org.flywaydb.core.Flyway.configure()
                 .dataSource(System.getenv("R2_TEST_DATABASE_URL"), "postgres",
                         System.getenv("R2_TEST_DATABASE_PASSWORD"))
                 .locations("classpath:db/migration").target("3").load().migrate();
+        org.flywaydb.core.Flyway.configure()
+                .dataSource(System.getenv("R2_TEST_DATABASE_URL"), "postgres",
+                        System.getenv("R2_TEST_DATABASE_PASSWORD"))
+                .locations("classpath:db/migration").target("7").load().migrate();
+        try (var connection = java.sql.DriverManager.getConnection(System.getenv("R2_TEST_DATABASE_URL"),
+                "postgres", System.getenv("R2_TEST_DATABASE_PASSWORD"));
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO portal_notice (id,title,summary,audience,published_at,created_by,updated_by)
+                    VALUES ('aa9790db-0e5d-4d1f-8487-ff35fb33ad57','Existing notice','Pre-upgrade draft',
+                        'ADMIN',CURRENT_TIMESTAMP,'SYSTEM','SYSTEM')
+                    """);
+        }
+        org.flywaydb.core.Flyway.configure()
+                .dataSource(System.getenv("R2_TEST_DATABASE_URL"), "postgres",
+                        System.getenv("R2_TEST_DATABASE_PASSWORD"))
+                .locations("classpath:db/migration").target("8").load().migrate();
         properties.add("spring.datasource.url", () -> System.getenv("R2_TEST_DATABASE_URL"));
         properties.add("spring.datasource.username", () -> "postgres");
         properties.add("spring.datasource.password", () -> System.getenv("R2_TEST_DATABASE_PASSWORD"));
@@ -63,13 +85,17 @@ class IdentityIntegrationTest {
     }
 
     private int login(String username, String password) throws Exception {
-        return call(browser, "POST", "/api/auth/login", "username=" + username + "&password=" + password,
+        return call(browser, "POST", "/api/auth/login", "username=" + username + "&password=" + password
+                + "&portalRole=" + (username.toLowerCase().startsWith("student")?"STUDENT":"ADMIN"),
                 "application/x-www-form-urlencoded", token()).statusCode();
     }
 
     @Test
     void identityLifecycleAndAuthorization() throws Exception {
         assertTrue(jdbc.queryForObject("SELECT count(*) FROM campus_announcement", Long.class) > 0);
+        assertEquals("GENERAL", jdbc.queryForObject("""
+                SELECT topic FROM portal_notice WHERE id='aa9790db-0e5d-4d1f-8487-ff35fb33ad57'
+                """, String.class));
         String temporary = UUID.randomUUID().toString();
         String permanent = UUID.randomUUID().toString();
         accounts.bootstrap("first.admin", temporary);
@@ -117,6 +143,11 @@ class IdentityIntegrationTest {
         accounts.changePassword(student.id(), 0, studentPassword, studentPermanent);
         assertEquals(401, call(browser, "GET", "/api/auth/me", "", null, null).statusCode());
         assertEquals(204, login("student.one", studentPermanent));
+        var results = call(browser, "GET", "/api/student/results", "", null, null);
+        assertEquals(200, results.statusCode());
+        assertTrue(results.body().contains("\"outcome\":\"PASS\""));
+        assertTrue(results.body().contains("Synthetic exam"));
+        assertEquals(403, call(browser, "GET", "/api/admin/exams", "", null, null).statusCode());
         assertEquals(403, call(browser, "GET", "/api/admin/accounts", "", null, null).statusCode());
         accounts.permissions(student.id(), new AccountRequests.Permissions("STUDENT", false, false), admin.id());
         assertEquals(401, call(browser, "GET", "/api/auth/me", "", null, null).statusCode());
@@ -149,6 +180,7 @@ class IdentityIntegrationTest {
         assertEquals(201, call(publicClient, "POST", "/api/public/enquiries", enquiry, "application/json", null).statusCode());
         assertEquals("PUBLIC", jdbc.queryForObject(
                 "SELECT created_by FROM admission_enquiry ORDER BY created_at DESC LIMIT 1", String.class));
+        registrationAndRecovery();
     }
 
     private boolean disable(UUID target, UUID actor) {
@@ -185,6 +217,8 @@ class IdentityIntegrationTest {
         college.save("assignments", assignment, admin);
         assertEquals(1, college.faculty(teacher.id()).size());
         assertTrue(college.faculty(student).isEmpty());
+        academicScheduling(student, teacher.id());
+        examPublication(student, teacher.id());
         assignment.put("active", false);
         college.save("assignments", assignment, admin);
         assertTrue(college.faculty(teacher.id()).isEmpty());
@@ -203,5 +237,129 @@ class IdentityIntegrationTest {
                 "Synthetic summary", 100, false, now.minusMinutes(1), null), admin);
         assertFalse(call(browser, "GET", "/api/public/announcements", "", null, null).body().contains(notice.toString()));
         assertEquals(200, call(browser, "GET", "/api/admin/setup/programs", "", null, null).statusCode());
+        UUID internal = UUID.randomUUID();
+        var target = new edu.vishvaya.portal.api.PortalNoticeRequest("Synthetic semester form",
+                "Synthetic notice for cohort 2026", "STUDENT", "2026", student,
+                true, now.minusMinutes(1), now.plusDays(1));
+        portalNotices.save(internal, target, admin);
+        assertTrue(portalNotices.inbox(student).stream().anyMatch(row -> row.get("id").equals(internal)));
+        assertFalse(portalNotices.inbox(teacher.id()).isEmpty());
+        assertFalse(portalNotices.inbox(admin).isEmpty());
+        assertFalse(call(browser, "GET", "/api/public/announcements", "", null, null).body().contains(internal.toString()));
+        accounts.permissions(teacher.id(), new AccountRequests.Permissions("FACULTY", true, true), admin);
+        assertThrows(ResponseStatusException.class, () -> portalNotices.save(internal, target, teacher.id()));
+        portalNotices.save(internal, new edu.vishvaya.portal.api.PortalNoticeRequest("Unpublished",
+                "Synthetic withdrawn notice", "STUDENT", "2026", student,
+                false, now.minusMinutes(1), null), admin);
+        assertTrue(portalNotices.inbox(student).isEmpty());
+        assignment.put("active", true);
+        college.save("assignments", assignment, admin);
+        UUID facultyNotice = UUID.randomUUID();
+        var cohortNotice = new edu.vishvaya.portal.api.PortalNoticeRequest("Synthetic faculty notice",
+                "Students in the assigned cohort only", "STUDENT", "2026", null,
+                true, now.minusMinutes(1), now.plusDays(1));
+        portalNotices.save(facultyNotice, cohortNotice, teacher.id());
+        byte[] pdf="%PDF-1.4\nSynthetic test document".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        documents.upload(facultyNotice,new org.springframework.mock.web.MockMultipartFile(
+                "file","official.pdf","application/pdf",pdf),teacher.id());
+        portalNotices.save(facultyNotice, cohortNotice, teacher.id());
+        assertFalse(portalNotices.inbox(student).stream().anyMatch(row -> row.get("id").equals(facultyNotice)));
+        long revision=((Number)portalNotices.managed(admin).stream().filter(row->row.get("id").equals(facultyNotice))
+                .findFirst().orElseThrow().get("revision")).longValue();
+        documents.approve(facultyNotice,revision,true,admin);
+        assertArrayEquals(pdf,documents.download(facultyNotice,student).bytes());
+        assertThrows(ResponseStatusException.class,()->documents.approve(facultyNotice,revision,true,admin));
+        assertTrue(portalNotices.inbox(student).stream().anyMatch(row -> row.get("id").equals(facultyNotice)));
+        assignment.put("active", false);
+        college.save("assignments", assignment, admin);
+        assertThrows(ResponseStatusException.class, () -> portalNotices.save(facultyNotice, cohortNotice, teacher.id()));
+    }
+
+    private void academicScheduling(UUID student, UUID teacher) throws Exception {
+        String csrf = token();
+        String academic = "/api/admin/academic";
+        String dates = """
+                {"startsOn":"2026-01-01","endsOn":"2026-06-01"}
+                """;
+        assertTrue(call(browser, "GET", "/api/admin/setup/terms", "", null, null)
+                .body().contains("\"starts_on\":\"2026-01-01\""));
+        assertEquals(204, call(browser, "PUT", academic + "/enrollments/o1/" + student,
+                dates, "application/json", csrf).statusCode());
+        String lesson = """
+                {"offeringCode":"o1","instructorId":"%s","room":"Lab A",
+                    "startsAt":"2026-02-02T10:00:00+05:30","endsAt":"2026-02-02T11:00:00+05:30"}
+                """.formatted(teacher);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<Integer> schedule = () -> call(browser, "PUT",
+                    academic + "/sessions/" + UUID.randomUUID(), lesson, "application/json", csrf).statusCode();
+            var outcomes = executor.invokeAll(List.of(schedule, schedule));
+            assertEquals(List.of(204, 409), java.util.stream.Stream.of(outcomes.get(0).get(), outcomes.get(1).get())
+                    .sorted().toList());
+        }
+        var timetable = call(browser, "GET", academic + "/timetable?week=2026-02-02", "", null, null);
+        assertEquals(200, timetable.statusCode());
+        assertTrue(timetable.body().contains("Lab A"));
+    }
+
+    private void examPublication(UUID student, UUID teacher) throws Exception {
+        UUID id = UUID.randomUUID();
+        String exam = "/api/admin/exams/" + id;
+        String csrf = token();
+        String schedule = """
+                {"offeringCode":"o1","title":"Synthetic exam","kind":"REGULAR","room":"Lab A",
+                    "startsAt":"2026-02-02T10:00:00+05:30","endsAt":"2026-02-02T11:00:00+05:30",
+                    "maxScore":100,"passScore":40,"state":"SCHEDULED"}
+                """;
+        assertEquals(204, call(browser, "PUT", exam, schedule, "application/json", csrf).statusCode());
+        assertEquals(409, call(browser, "POST", exam + "/release", "{\"revision\":0}",
+                "application/json", csrf).statusCode());
+        String score = "{\"examRevision\":0,\"score\":75.25}";
+        assertEquals(404, call(browser, "PUT", exam + "/scores/" + teacher, score,
+                "application/json", csrf).statusCode());
+        assertEquals(204, call(browser, "PUT", exam + "/scores/" + student, score,
+                "application/json", csrf).statusCode());
+        assertEquals(409, call(browser, "POST", exam + "/release", "{\"revision\":0}",
+                "application/json", csrf).statusCode());
+        assertEquals(204, call(browser, "POST", exam + "/release", "{\"revision\":1}",
+                "application/json", csrf).statusCode());
+        assertEquals(204, call(browser, "POST", exam + "/release", "{\"revision\":1}",
+                "application/json", csrf).statusCode());
+    }
+
+    private void registrationAndRecovery() throws Exception {
+        registration.register(new edu.vishvaya.portal.api.RegistrationRequest("demo.user","Demo visitor",
+                "9876543210","demo@example.test","STUDENT","unused"));
+        assertThrows(ResponseStatusException.class,()->registration.register(
+                new edu.vishvaya.portal.api.RegistrationRequest("bad.admin","Synthetic admin",
+                "9876543219","admin@example.test","ADMIN","unused")));
+        UUID registeredId=jdbc.queryForObject("SELECT id FROM portal_account WHERE login='demo.user'",UUID.class);
+        assertEquals("demo@example.test",registration.profile(registeredId).get("email"));
+        assertThrows(ResponseStatusException.class,()->registration.register(
+                new edu.vishvaya.portal.api.RegistrationRequest("different.user","  DEMO   visitor ",
+                "9876543210","other@example.test","FACULTY","unused")));
+        var message=org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(mail).send(org.mockito.ArgumentMatchers.eq("demo@example.test"),
+                org.mockito.ArgumentMatchers.eq("Vishvaya demo registration"),message.capture());
+        String temporary=message.getValue().split("Temporary password: ")[1].split("\\s")[0];
+        assertEquals(401,call(browser,"POST","/api/auth/login",
+                "username=demo.user&password="+temporary+"&portalRole=FACULTY",
+                "application/x-www-form-urlencoded",token()).statusCode());
+        assertEquals(204,call(browser,"POST","/api/auth/login",
+                "username=demo%40example.test&password="+temporary+"&portalRole=STUDENT",
+                "application/x-www-form-urlencoded",token()).statusCode());
+        registration.recover("demo.user","STUDENT");
+        var codeMessage=org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(mail).send(org.mockito.ArgumentMatchers.eq("demo@example.test"),
+                org.mockito.ArgumentMatchers.eq("Vishvaya password reset code"),codeMessage.capture());
+        String code=codeMessage.getValue().split("code is ")[1].substring(0,6);
+        assertFalse(registration.reset("demo.user","STUDENT",code.equals("000000")?"111111":"000000",temporary+"X"));
+        assertTrue(registration.reset("demo.user","STUDENT",code,temporary+"X"));
+        assertFalse(registration.reset("demo.user","STUDENT",code,temporary+"Y"));
+        assertEquals(401,call(browser,"GET","/api/auth/me","",null,null).statusCode());
+        assertEquals(204,call(browser,"POST","/api/auth/login",
+                "username=demo.user&password="+temporary+"X&portalRole=STUDENT",
+                "application/x-www-form-urlencoded",token()).statusCode());
+        var me=call(browser,"GET","/api/auth/me","",null,null);
+        assertTrue(me.body().contains("\"passwordChangeRequired\":false"));
     }
 }

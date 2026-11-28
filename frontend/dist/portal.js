@@ -8,6 +8,8 @@ function settings(open) {
 document.querySelector('#open-settings').addEventListener('click', () => settings(true));
 document.querySelector('#close-settings').addEventListener('click', () => settings(false));
 function showSignIn() {
+  document.body.classList.remove('signed-in');
+  document.querySelector('#login-layout').hidden = false;
   document.querySelector('#account-menu').hidden = true;
   document.querySelector('#settings').hidden = true;
   document.querySelector('#dashboard').replaceChildren();
@@ -31,12 +33,29 @@ async function request(url, options = {}) {
     const body = await response.json().catch(() => ({}));
     if (response.status === 401) {
       showSignIn();
-      throw new Error('Sign-in failed or your session expired. Sign in again.');
+      throw new Error(url==='/api/auth/login'
+        ? 'Check your username or email, password, and selected portal.'
+        : 'Your session expired. Sign in again.');
     }
-    if (response.status === 429) throw new Error('Too many sign-in attempts. Try again in one minute.');
+    if (response.status === 429) {
+      const seconds=Math.max(1,Number(response.headers.get('Retry-After')) || 60);
+      const action=({'/api/auth/login':'sign-in attempts','/api/auth/captcha':'CAPTCHA refreshes',
+        '/api/auth/register':'registration attempts','/api/auth/forgot-password':'reset-code requests',
+        '/api/auth/reset-password':'reset attempts'})[url] || 'requests';
+      const error=new Error('Too many '+action+'. Try again in '+seconds+' seconds.');
+      error.retryAfter=seconds;
+      throw error;
+    }
     throw new Error(body.detail || 'The request could not be completed. Reload and try again.');
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  const content = await response.text();
+  if (!content.trim()) return null;
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error('The server returned an unreadable response. Reload the page and try again.');
+  }
 }
 async function loadAccount() {
   const response = await fetch('/api/auth/me', {cache: 'no-store'});
@@ -46,6 +65,17 @@ async function loadAccount() {
   document.querySelector('#account').hidden = !signedIn;
   if (signedIn) {
     const account = await response.json();
+    if (document.body.dataset.portalRole !== account.role) {
+      showSignIn();
+      document.querySelector('#account-menu').hidden=false;
+      document.querySelector('#account-label').textContent=account.displayName;
+      document.querySelector('#open-settings').hidden=true;
+      status.textContent='This account belongs to another portal. Select the correct portal or sign out to switch accounts.';
+      return;
+    }
+    document.body.classList.add('signed-in');
+    document.querySelector('#login-layout').hidden = true;
+    setPortalRole(account.role);
     document.querySelector('#welcome').textContent = account.displayName;
     document.querySelector('#role').textContent = account.role;
     document.querySelector('#account-label').textContent = account.displayName;
@@ -61,9 +91,16 @@ async function loadAccount() {
   }
 }
 async function submit(form, action) {
-  const button = form.querySelector('button');
+  const button = form.querySelector('button[type="submit"], button:not([type])');
   button.disabled = true;
-  try { await action(); } catch (error) { status.textContent = error.message; }
+  let feedback=form.querySelector('[data-feedback]');
+  if(!feedback) {
+    feedback=element('p');feedback.dataset.feedback='';feedback.setAttribute('role','status');form.append(feedback);
+  }
+  feedback.textContent='';status.textContent='';
+  try { await action(); } catch (error) {
+    feedback.textContent = error.message;status.textContent = error.message;
+  }
   finally { button.disabled = false; }
 }
 document.querySelector('#login').addEventListener('submit', event => {
@@ -71,8 +108,10 @@ document.querySelector('#login').addEventListener('submit', event => {
   const form = event.currentTarget;
   submit(form, async () => {
     await csrf();
+    const body=new URLSearchParams(new FormData(form));
+    body.set('portalRole',document.body.dataset.portalRole);
     await request('/api/auth/login', {method: 'POST',
-      headers: {[token.headerName]: token.token}, body: new URLSearchParams(new FormData(form))});
+      headers: {[token.headerName]: token.token}, body});
     form.reset();
     await csrf();
     await loadAccount();
@@ -115,8 +154,12 @@ function revealEditor(container) {
 function editor(fields, values, save) {
   const form = element('form');
   form.autocomplete = 'off';
+  form.addEventListener('input',()=>{
+    status.textContent='';
+    const feedback=form.querySelector('[data-feedback]');if(feedback) feedback.textContent='';
+  });
   for (const field of fields) {
-    const label = element('label', field.replaceAll('_', ' '));
+    const label = element('label', fieldLabel(field));
     const input = element(field === 'summary' ? 'textarea' : 'input');
     input.name = field;
     if (field === 'role' || field === 'kind') {
@@ -135,10 +178,18 @@ function editor(fields, values, save) {
     }
     input.type = ['active', 'visible', 'enabled', 'canPublish', 'published'].includes(field) ? 'checkbox'
       : ['display_order', 'priority'].includes(field) ? 'number'
+      : ['starts_on', 'ends_on'].includes(field) ? 'date'
+      : ['published_at', 'expires_at'].includes(field) ? 'datetime-local'
       : field === 'temporaryPassword' ? 'password' : 'text';
     input.required = input.type !== 'checkbox' && field !== 'expires_at';
     if (input.type === 'checkbox') input.checked = values[field] ?? ['active', 'visible', 'enabled'].includes(field);
     else input.value = values[field] ?? '';
+    if (input.type === 'datetime-local' && values[field]) {
+      const date = new Date(values[field]);
+      if (!Number.isNaN(date.getTime())) {
+        input.value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+      }
+    }
     label.append(input);
     form.append(label);
   }
@@ -163,40 +214,30 @@ async function mutate(url, body, method = 'PUT') {
   return request(url, {method, headers: {'Content-Type': 'application/json', [token.headerName]: token.token},
     body: JSON.stringify(body)});
 }
-function records(container, rows, choose) {
-  container.replaceChildren();
-  if (!rows.length) container.append(element('p', 'No records available.'));
-  for (const row of rows) {
-    const article = element('article');
-    article.append(element('h4', row.displayName || row.name || row.title || row.login || row.code));
-    const details = element('dl');
-    for (const [key, value] of Object.entries(row)
-      .filter(([key]) => !['created_at', 'updated_at', 'created_by', 'updated_by'].includes(key))
-    ) {
-      details.append(element('dt', key.replaceAll('_', ' ')),
-        element('dd', value === null ? '—' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)));
-    }
-    article.append(details);
-    if (choose) {
-      const button = element('button', 'Edit');
-      button.type = 'button';
-      button.addEventListener('click', () => choose(row));
-      article.append(button);
-    }
-    container.append(article);
-  }
-}
+function records(container, rows, choose) { renderTable(container, rows, choose); }
 async function loadDashboard(account) {
   const dashboard = document.querySelector('#dashboard');
   dashboard.replaceChildren(element('h2', account.role + ' dashboard'));
+  await overviewPanel(dashboard, account);
   if (account.role === 'ADMIN') {
     await collegeTools(dashboard);
     await accountTools(dashboard);
   } else {
+    const profile=element('section');
+    profile.append(element('h3','My profile'));
+    const details=element('div');profile.append(details);
+    records(details,[await request('/api/auth/profile')]);
+    dashboard.append(profile);
     const rows = await request('/api/' + account.role.toLowerCase() + '/dashboard');
-    records(dashboard.appendChild(element('section')), rows);
+    const section = element('section');
+    section.append(element('h3', account.role === 'STUDENT' ? 'My academic profile' : 'My teaching'));
+    records(section.appendChild(element('div')), rows);
+    dashboard.append(section);
   }
-  if (account.role === 'ADMIN' || account.canPublish) await noticeTools(dashboard);
+  if (account.role === 'ADMIN') await noticeTools(dashboard);
+  if (account.role === 'ADMIN' || account.role === 'FACULTY') await portalNoticeTools(dashboard, account);
+  academicPanels(dashboard, account);
+  studentServicePanels(dashboard, account);
   const panels = [...dashboard.children].filter(node => node.tagName === 'SECTION');
   if (panels.length > 1) {
     const navigation = element('nav');
@@ -208,7 +249,9 @@ async function loadDashboard(account) {
       button.type = 'button';
       button.setAttribute('aria-controls', panel.id);
       button.addEventListener('click', () => {
+        status.textContent='';
         panels.forEach(item => { item.hidden = item !== panel; });
+        panel.refresh?.().catch(error=>{status.textContent=error.message;});
         navigation.querySelectorAll('button').forEach(item => item.setAttribute('aria-current', item === button ? 'page' : 'false'));
       });
       panel.hidden = index !== 0;
@@ -236,28 +279,31 @@ async function collegeTools(container) {
   let editRecord;
   async function load() {
     const type = select.value;
-    function edit(row = {}) {
-      formArea.hidden = false;
+    async function edit(row = {}) {
       const heading = element('h4', row.code ? 'Edit ' + row.name : 'Add ' + type);
-      formArea.replaceChildren(editor(schema[type], row, async body => {
+      const form = editor(schema[type], row, async body => {
         await mutate('/api/admin/setup/' + type, body);
         await load();
-      }));
-      formArea.prepend(heading);
-      if (row.code) formArea.querySelector('[name=code]').readOnly = true;
+      });
+      await populateReferences(form, row, type);
+      if (select.value !== type) return;
+      if (row.code) form.querySelector('[name=code]').readOnly = true;
+      formArea.replaceChildren(heading, form);
+      formArea.hidden = false;
       revealEditor(formArea);
     }
     editRecord = edit;
     formArea.hidden = true;
     list.replaceChildren();
     const rows = await request('/api/admin/setup/' + type);
-    if (select.value === type) records(list, rows, edit);
+    if (select.value === type) records(list, rows, row => edit(row).catch(error => { status.textContent = error.message; }));
   }
   select.addEventListener('change', () => load().catch(error => { status.textContent = error.message; }));
-  newRecord.addEventListener('click', () => editRecord());
+  newRecord.addEventListener('click', () => editRecord().catch(error => { status.textContent = error.message; }));
   section.append(element('p', 'Choose a record type to browse existing records or add a new one.'),
     select, newRecord, formArea, list);
   container.append(section);
+  section.refresh=load;
   await load();
 }
 async function accountTools(container) {
@@ -267,8 +313,8 @@ async function accountTools(container) {
   const editArea = element('div');
   async function load() {
     records(list, await request('/api/admin/accounts'), account => {
-      const permissions = editor(['role', 'enabled', 'canPublish'], account, async body => {
-        await mutate('/api/admin/accounts/' + account.id + '/permissions', body);
+      const permissions = editor(['role', 'enabled'], account, async body => {
+        await mutate('/api/admin/accounts/' + account.id + '/permissions', {...body,canPublish:false});
         await load();
       });
       const reset = editor(['temporaryPassword'], {}, async body => {
@@ -291,6 +337,7 @@ async function accountTools(container) {
   add.addEventListener('click', () => { create.hidden = !create.hidden; });
   section.append(add, create, list, editArea);
   container.append(section);
+  section.refresh=load;
   await load();
 }
 async function noticeTools(container) {
@@ -306,7 +353,8 @@ async function noticeTools(container) {
       async body => {
         await mutate('/api/staff/announcements/' + id, {
           category: body.category, title: body.title, summary: body.summary, priority: body.priority,
-          published: body.published, publishedAt: body.published_at, expiresAt: body.expires_at || null
+          published: body.published, publishedAt: new Date(body.published_at).toISOString(),
+          expiresAt: body.expires_at ? new Date(body.expires_at).toISOString() : null
         });
         await load();
       }));
@@ -320,9 +368,10 @@ async function noticeTools(container) {
   const add = element('button', 'Create announcement');
   add.type = 'button';
   add.addEventListener('click', () => edit());
-  section.append(add, element('p', 'Publication and expiry times include a timezone. Example format: 2026-11-27T10:00:00+05:30.'),
+  section.append(add, element('p', 'Publication and expiry times use your device’s local timezone.'),
     formArea, list);
   container.append(section);
+  section.refresh=load;
   await load();
 }
 

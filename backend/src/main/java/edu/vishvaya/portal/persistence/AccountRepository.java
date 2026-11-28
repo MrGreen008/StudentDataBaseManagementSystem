@@ -19,7 +19,7 @@ public class AccountRepository {
     public AccountRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public Optional<PortalAccount> byLogin(String login) {
-        return jdbc.query("SELECT * FROM portal_account WHERE login = ?", MAPPER, login).stream().findFirst();
+        return jdbc.query("SELECT * FROM portal_account WHERE login = ? OR lower(email) = ?", MAPPER, login, login).stream().findFirst();
     }
 
     public Optional<PortalAccount> byId(UUID id) {
